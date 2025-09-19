@@ -5,6 +5,7 @@ import (
 	"log"
 	"math/rand"
 	"time"
+
 	_ "github.com/mattn/go-sqlite3" // <-- needed for SQLite driver
 	"github.com/yoooby/showtrack/internal/model"
 )
@@ -156,7 +157,7 @@ func (db *DB) TestGetRandomEpisode() *model.Episode {
 	// Fetch one episode with offset
 	ep := &model.Episode{}
 	err = db.Conn.QueryRow(`
-		SELECT id, title, season, episode, path
+		SELECT id, show_title, season, episode, file_path
 		FROM episodes
 		LIMIT 1 OFFSET ?
 	`, offset).Scan(&ep.Id, &ep.Title, &ep.Season, &ep.Episode, &ep.Path)

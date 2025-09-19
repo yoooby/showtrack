@@ -2,7 +2,9 @@ package vlc
 
 import (
 	"fmt"
+	"log"
 	"os/exec"
+	"strconv"
 	"sync"
 	"time"
 
@@ -58,21 +60,28 @@ func (p *Player) playLoop() {
         p.mu.Unlock()
 
         progress := p.db.GetProgress(ep.Title)
+cmd := exec.Command("vlc",
+    "--extraintf", "http",
+    "--http-host", p.VLC.Host,
+    "--http-port", strconv.Itoa(p.VLC.Port),
+    "--http-password", p.VLC.Password,
+    fmt.Sprintf("--start-time=%d", progress),
+    ep.Path,
+)
 
-		cmd := exec.Command("vlc",
-			"--extraintf", "http",
-			"--http-port=" + p.VLC.Host,
-			"--http-password=" + p.VLC.Password,
-			fmt.Sprintf("--start-time=%d", progress),
-			ep.Path,
-		)
-        done := make(chan struct{}) // signal channel for this episode
+        done := make(chan struct{})
+        go p.trackProgress(ep, done)
 
-        go p.trackProgress(ep, done) // pass channel
+        if err := cmd.Start(); err != nil {
+            log.Printf("failed to start VLC: %v", err)
+            close(done)
+            return
+        }
 
-        cmd.Start()
-        cmd.Wait()      // blocks until VLC exits
-        close(done)     // signal trackProgress to stop
+        if err := cmd.Wait(); err != nil {
+            log.Printf("VLC exited with error: %v", err)
+        }
+        close(done)
 
         // move to next episode in queue
         p.mu.Lock()

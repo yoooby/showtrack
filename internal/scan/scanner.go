@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strconv"
 
+	"github.com/razsteinmetz/go-ptn"
 	"github.com/yoooby/showtrack/internal/db"
 	"github.com/yoooby/showtrack/internal/model"
 )
@@ -88,18 +89,30 @@ func ScanFolder(root string, db *db.DB) ([]model.Episode, error) {
         }
 
 
-        folderSeason := 0
+/*         folderSeason := 0
         parent := filepath.Base(filepath.Dir(path))
         folderSeason = detectSeasonFromFolder(parent)
         if folderSeason == 0 {
             grandparent := filepath.Base(filepath.Dir(filepath.Dir(path)))
             folderSeason = detectSeasonFromFolder(grandparent)
+        } */
+
+        //ep := ParseEpisode(info.Name(), folderSeason)
+        torrent, err := ptn.Parse(info.Name())
+        if err != nil {
+            return err
         }
-
-        ep := ParseEpisode(info.Name(), folderSeason)
-        ep.Path = path 
-        episodes = append(episodes, *ep)
-
+        if torrent.IsMovie {
+            return nil
+        }
+        ep := model.Episode{
+            Id: OfflineEpisodeID(torrent.Title, torrent.Season, torrent.Episode),
+            Title: torrent.Title,
+            Episode: torrent.Episode,
+            Season: torrent.Season,
+            Path: path,
+        }
+        episodes = append(episodes, ep)
         return nil
     })
 

@@ -15,7 +15,7 @@ func main() {
 		panic("ERROR DB " + err.Error())
 	}
 
-	episodes, err := scan.ScanFolder("/Users/ayoubidgoufkir/Downloads", db)
+	episodes, err := scan.ScanFolder("/Users/ayoubidgoufkir/Downloads/tv", db)
 	if err != nil {
 		panic(err)
 	}

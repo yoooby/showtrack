@@ -3,12 +3,8 @@ package scan
 import (
 	"crypto/sha1"
 	"encoding/hex"
-	"path/filepath"
 	"regexp"
 	"strings"
-
-	"github.com/razsteinmetz/go-ptn"
-	"github.com/yoooby/showtrack/internal/model"
 )
 
 // incase season is in the parent folder
@@ -47,7 +43,7 @@ func cleanTitle(title string) string {
 }
 
 
-
+/* 
 func ParseEpisode(path string, folderSeason int) *model.Episode {
     ep := &model.Episode{}
     filename := filepath.Base(path)
@@ -74,18 +70,5 @@ func ParseEpisode(path string, folderSeason int) *model.Episode {
         }
     }
 
-    // Determine show title
-    ep.Title = extractShowName(filename, parent, grandparent)
-    ep.Id = OfflineEpisodeID(ep.Title, ep.Season, ep.Episode)
-	ep.Path = path */
-
-
-    torrent, err := ptn.Parse(filename)
-    if err != nil {
-        panic(err)
-    }
-    
-    
-}
-
+ */
 // TODO: DO NOT RESCAN THE WHOLE FOLDER ALL THE TIME

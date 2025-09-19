@@ -1,117 +1,117 @@
 package vlc
 
 import (
+	"encoding/json"
 	"fmt"
-	"log"
-	"os/exec"
-	"strconv"
-	"sync"
+	"net/http"
+	"net/url"
 	"time"
-
-	"github.com/yoooby/showtrack/internal/db"
-	"github.com/yoooby/showtrack/internal/model"
 )
 
-
-
-
-type Player struct {
-	VLC       *VLC
-	CurrentEP *model.Episode
-	Queue     []*model.Episode
-	mu        sync.Mutex
-	db        *db.DB
+type VLC struct {
+	Host     string // e.g. "127.0.0.1"
+	Port     int    // e.g. 42069
+	Password string
 }
 
-func NewPlayer(password string, port int, db db.DB) *Player {
-	vlc := VLC{
-		Host: "127.0.0.1",
-		Port: port,
-		Password: password,
+// Status queries VLC's HTTP interface for the current playback status
+func (v *VLC) Status() (map[string]interface{}, error) {
+	url := fmt.Sprintf("http://%s:%d/requests/status.json", v.Host, v.Port)
+	req, _ := http.NewRequest("GET", url, nil)
+	req.SetBasicAuth("", v.Password) // VLC uses empty username and password
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	var data map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+		return nil, err
 	}
 
-	return &Player{
-		VLC: &vlc,
-		db: &db,
-	}
+	return data, nil
 }
 
-func (p *Player) PlayShow(ep model.Episode) {
-	p.mu.Lock()
 
-	p.CurrentEP = &ep
-
-	p.Queue = p.db.GetNextEpisodes(ep.Title, ep.Season, ep.Episode, 2)
-
-	p.mu.Unlock()
-
-	go p.playLoop()
-}
-
-func (p *Player) playLoop() {
-    for {
-        p.mu.Lock()
-        if p.CurrentEP == nil {
-            p.mu.Unlock()
-            break
-        }
-
-        ep := p.CurrentEP
-        p.mu.Unlock()
-
-        progress := p.db.GetProgress(ep.Title)
-cmd := exec.Command("vlc",
-    "--extraintf", "http",
-    "--http-host", p.VLC.Host,
-    "--http-port", strconv.Itoa(p.VLC.Port),
-    "--http-password", p.VLC.Password,
-    fmt.Sprintf("--start-time=%d", progress),
-    ep.Path,
-)
-
-        done := make(chan struct{})
-        go p.trackProgress(ep, done)
-
-        if err := cmd.Start(); err != nil {
-            log.Printf("failed to start VLC: %v", err)
-            close(done)
-            return
-        }
-
-        if err := cmd.Wait(); err != nil {
-            log.Printf("VLC exited with error: %v", err)
-        }
-        close(done)
-
-        // move to next episode in queue
-        p.mu.Lock()
-        if len(p.Queue) > 0 {
-            p.CurrentEP = p.Queue[0]
-            p.Queue = p.Queue[1:]
-        } else {
-            p.CurrentEP = nil
-        }
-        p.mu.Unlock()
+func (v *VLC) AddToPlaylist(path string) error {
+    url := fmt.Sprintf("http://%s:%d/requests/status.xml?command=in_enqueue&input=%s", 
+        v.Host, v.Port, url.QueryEscape(path))
+    
+    req, err := http.NewRequest("GET", url, nil)
+    if err != nil {
+        return err
     }
+    req.SetBasicAuth("", v.Password)
+    
+    client := &http.Client{Timeout: 5 * time.Second}
+    resp, err := client.Do(req)
+    if err != nil {
+        return err
+    }
+    defer resp.Body.Close()
+    
+    return nil
 }
 
-
-
-func (p *Player) trackProgress(ep *model.Episode, done chan struct{}) {
-    ticker := time.NewTicker(2 * time.Second)
-    defer ticker.Stop()
-
-    for {
-        select {
-        case <-done:
-            return // stop tracking when episode finished
-        case <-ticker.C:
-            status, err := p.VLC.Status()
-            if err != nil {
-                return
-            }
-            t := int(status["time"].(float64))
-            p.db.SaveProgress(ep.Title, ep.Season, ep.Episode, t)
-        }
+func (v *VLC) ClearPlaylist() error {
+    url := fmt.Sprintf("http://%s:%d/requests/status.xml?command=pl_empty", 
+        v.Host, v.Port)
+    
+    req, err := http.NewRequest("GET", url, nil)
+    if err != nil {
+        return err
     }
+    req.SetBasicAuth("", v.Password)
+    
+    client := &http.Client{Timeout: 5 * time.Second}
+    resp, err := client.Do(req)
+    if err != nil {
+        return err
+    }
+    defer resp.Body.Close()
+    
+    return nil
+}
+
+func (v *VLC) Play() error {
+    url := fmt.Sprintf("http://%s:%d/requests/status.xml?command=pl_play", 
+        v.Host, v.Port)
+    
+    req, err := http.NewRequest("GET", url, nil)
+    if err != nil {
+        return err
+    }
+    req.SetBasicAuth("", v.Password)
+    
+    client := &http.Client{Timeout: 5 * time.Second}
+    resp, err := client.Do(req)
+    if err != nil {
+        return err
+    }
+    defer resp.Body.Close()
+    
+    return nil
+}
+
+func (v *VLC) Seek(seconds int) error {
+    url := fmt.Sprintf("http://%s:%d/requests/status.xml?command=seek&val=%d", 
+        v.Host, v.Port, seconds)
+    
+    req, err := http.NewRequest("GET", url, nil)
+    if err != nil {
+        return err
+    }
+    req.SetBasicAuth("", v.Password)
+    
+    client := &http.Client{Timeout: 5 * time.Second}
+    resp, err := client.Do(req)
+    if err != nil {
+        return err
+    }
+    defer resp.Body.Close()
+    
+    return nil
 }

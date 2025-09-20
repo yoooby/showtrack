@@ -9,5 +9,6 @@ require (
 
 require (
 	github.com/razsteinmetz/go-ptn v1.0.0 // indirect
+	github.com/urfave/cli/v3 v3.4.1 // indirect
 	golang.org/x/text v0.3.7 // indirect
 )

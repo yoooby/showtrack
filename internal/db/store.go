@@ -2,9 +2,7 @@ package db
 
 import (
 	"database/sql"
-	"log"
-	"math/rand"
-	"time"
+	"fmt"
 
 	_ "github.com/mattn/go-sqlite3" // <-- needed for SQLite driver
 	"github.com/yoooby/showtrack/internal/model"
@@ -12,6 +10,10 @@ import (
 
 type DB struct {
 	Conn *sql.DB
+}
+
+func (db *DB) FindLatestWatchedEpisodeGlobal() model.Episode {
+	panic("UNIMPLEMENTED")
 }
 
 func InitDB(path string) (*DB, error) {
@@ -45,7 +47,18 @@ func InitDB(path string) (*DB, error) {
 	if err != nil {
 		return nil, err
 	}
-
+	_, err = conn.Exec(`
+    	CREATE VIRTUAL TABLE IF NOT EXISTS shows_fts USING fts5(title, content='episodes', content_rowid='id');
+	`)
+	if err != nil {
+		return nil, err
+	}
+	_, err = conn.Exec(`
+		CREATE VIRTUAL TABLE IF NOT EXISTS progress_fts USING fts5(show_title, content='progress', content_rowid='rowid');
+	`)
+	if err != nil {
+		return nil, err
+	}
 	return &DB{Conn: conn}, nil
 
 }
@@ -74,6 +87,19 @@ func (db *DB) SaveEpisdoes(eps []model.Episode) error {
 			return err
 		}
 	}
+
+		
+	// populate FTS table from episodes
+	_, err = stmt.Exec(`
+        INSERT INTO shows_fts(rowid, title)
+        SELECT id, show_title FROM episodes
+        ON CONFLICT(rowid) DO UPDATE SET title=excluded.title
+    `)
+	if err != nil {
+		tx.Rollback()
+		return err
+	}
+
 	return tx.Commit()
 }
 
@@ -86,8 +112,18 @@ func (db *DB) SaveProgress(show string, season, episode, progress int) error {
             last_watched_episode = excluded.last_watched_episode,
             progress = excluded.progress
     `, show, season, episode, progress)
-
-	return err
+	if err != nil {
+		return err
+	}
+	_, err = db.Conn.Exec(`
+		INSERT INTO progress_fts(rowid, show_title)
+		SELECT rowid, show_title FROM progress
+		ON CONFLICT(rowid) DO UPDATE SET show_title=excluded.show_title
+	`)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func (db *DB) GetNextEpisodes(title string, season int, episode int, count int) []*model.Episode {
@@ -131,35 +167,77 @@ func (db *DB) GetProgress(title string) int {
 	return ts
 }
 
-// TestGetRandomEpisode returns a random episode from the DB
-func (db *DB) TestGetRandomEpisode() *model.Episode {
-	// Seed rand
-	rand.Seed(time.Now().UnixNano())
+func (db *DB) FindLatestWatchedEpisode(query string) (*model.Episode, error) {
+	var bestMatch string
+	err := db.Conn.QueryRow(`
+		SELECT show_title
+		FROM progress_fts
+		WHERE progress_fts MATCH ?
+		LIMIT 1
+	`, query).Scan(&bestMatch)
 
-	// Count total episodes
-	var count int
-	err := db.Conn.QueryRow("SELECT COUNT(*) FROM episodes").Scan(&count)
 	if err != nil {
-		log.Fatal("Failed to count episodes:", err)
+		if err != sql.ErrNoRows {
+			return nil, err
+		}
+		// fallback: not in progress, use query directly as title
+		bestMatch = query
 	}
 
-	if count == 0 {
-		return nil
+	var season, episode int
+	err = db.Conn.QueryRow(`
+		SELECT last_watched_season, last_watched_episode
+		FROM progress
+		WHERE show_title = ?
+	`, bestMatch).Scan(&season, &episode)
+
+	if err != nil && err != sql.ErrNoRows {
+		return nil, err
 	}
 
-	// Pick a random offset
-	offset := rand.Intn(count)
+	var ep model.Episode
+	if err == nil {
+		err = db.Conn.QueryRow(`
+			SELECT id, show_title, season, episode, file_path
+			FROM episodes
+			WHERE show_title = ? AND season = ? AND episode = ?
+		`, bestMatch, season, episode).Scan(&ep.Id, &ep.Title, &ep.Season, &ep.Episode, &ep.Path)
+		if err == nil {
+			return &ep, nil
+		}
+	}
 
-	// Fetch one episode with offset
-	ep := &model.Episode{}
 	err = db.Conn.QueryRow(`
 		SELECT id, show_title, season, episode, file_path
 		FROM episodes
-		LIMIT 1 OFFSET ?
-	`, offset).Scan(&ep.Id, &ep.Title, &ep.Season, &ep.Episode, &ep.Path)
+		WHERE show_title = ?
+		ORDER BY season ASC, episode ASC
+		LIMIT 1
+	`, bestMatch).Scan(&ep.Id, &ep.Title, &ep.Season, &ep.Episode, &ep.Path)
 	if err != nil {
-		log.Fatal("Failed to fetch random episode:", err)
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("show not found: %s", bestMatch)
+		}
+		return nil, err
 	}
 
-	return ep
+	return &ep, nil
+}
+
+func (db *DB) GetEpisode(title string, season int, episode int) (*model.Episode, error) {
+	var ep model.Episode
+	err := db.Conn.QueryRow(`
+		SELECT id, show_title, season, episode, file_path
+		FROM episodes
+		WHERE show_title = ? AND season = ? AND episode = ?
+	`, title, season, episode).Scan(&ep.Id, &ep.Title, &ep.Season, &ep.Episode, &ep.Path)
+
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("episode not found: %s S%dE%d", title, season, episode)
+		}
+		return nil, err
+	}
+
+	return &ep, nil
 }

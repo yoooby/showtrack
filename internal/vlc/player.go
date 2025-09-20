@@ -47,10 +47,6 @@ func (p *Player) PlayShow(ep model.Episode) {
 		log.Printf("Failed to get next episodes: %v", err)
 		return
 	}
-	log.Println("Queue length:", len(p.Queue))
-	for _, e := range p.Queue {
-		log.Println(e.Title, e.Season, e.Episode, e.Path)
-	}
 	if !p.isRunning {
 		p.startVLC()
 	}
@@ -69,7 +65,7 @@ func (p *Player) startVLC() {
 		"--fullscreen", // Opens in fullscreen video mode
 	)
 
-	log.Println("started http")
+	log.Println("started VLC...")
 	if err := p.vlcCmd.Start(); err != nil {
 		log.Printf("Failed to start VLC: %v", err)
 		return

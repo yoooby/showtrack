@@ -11,9 +11,15 @@ well this is more lightweight plus i don't need have to have a server running on
 
 ## Installation
 ```bash
-go get github.com/yoooby/showtrack
-go build -o showtrack
+go install github.com/yoooby/showtrack/cmd/showtracker@latest
 ```
+or 
+```bash
+git clone https://github.com/yoooby/showtrack.git
+cd showtrack
+go build -o showtrack ./cmd/showtracker
+```
+
 Also make sure VLC is installed and vlc is added to path
 
 ## Usage

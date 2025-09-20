@@ -3,6 +3,7 @@ package db
 import (
 	"database/sql"
 	"fmt"
+	"strings"
 
 	_ "github.com/mattn/go-sqlite3" // <-- needed for SQLite driver
 	"github.com/yoooby/showtrack/internal/model"
@@ -12,8 +13,24 @@ type DB struct {
 	Conn *sql.DB
 }
 
-func (db *DB) FindLatestWatchedEpisodeGlobal() model.Episode {
-	panic("UNIMPLEMENTED")
+func (db *DB) FindLatestWatchedEpisodeGlobal() (*model.Episode, error) {
+	var title string
+	var seasom, episode int
+
+	err := db.Conn.QueryRow(`
+		SELECT show_title, last_watched_season, last_watched_episode
+		FROM progress
+		ORDER BY updated_at DESC
+		LIMIT 1
+	`).Scan(&title, &seasom, &episode)
+
+	if err != nil {
+		if err != sql.ErrNoRows {
+			return nil, fmt.Errorf("no watched episodes found")
+		}
+		return nil, err
+	}
+	return db.GetEpisode(title, seasom, episode)
 }
 
 func InitDB(path string) (*DB, error) {
@@ -41,7 +58,8 @@ func InitDB(path string) (*DB, error) {
             show_title TEXT PRIMARY KEY,
             last_watched_season INTEGER,
             last_watched_episode INTEGER,
-            progress INTEGER
+            progress INTEGER,
+			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )
     `)
 	if err != nil {
@@ -81,48 +99,32 @@ func (db *DB) SaveEpisdoes(eps []model.Episode) error {
 	defer stmt.Close()
 
 	for _, ep := range eps {
-		_, err := stmt.Exec(ep.Id, ep.Title, ep.Season, ep.Episode, ep.Path)
+		_, err := stmt.Exec(ep.Id, strings.ToLower(ep.Title), ep.Season, ep.Episode, ep.Path)
 		if err != nil {
 			tx.Rollback()
 			return err
 		}
 	}
 
-		
-	// populate FTS table from episodes
-	_, err = stmt.Exec(`
-        INSERT INTO shows_fts(rowid, title)
-        SELECT id, show_title FROM episodes
-        ON CONFLICT(rowid) DO UPDATE SET title=excluded.title
-    `)
-	if err != nil {
-		tx.Rollback()
-		return err
-	}
+	tx.Commit()
 
-	return tx.Commit()
+	return err
 }
 
 func (db *DB) SaveProgress(show string, season, episode, progress int) error {
 	_, err := db.Conn.Exec(`
-        INSERT INTO progress (show_title, last_watched_season, last_watched_episode, progress)
-        VALUES (?, ?, ?, ?)
+        INSERT INTO progress (show_title, last_watched_season, last_watched_episode, progress, updated_at)
+        VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
         ON CONFLICT(show_title) DO UPDATE SET
             last_watched_season = excluded.last_watched_season,
             last_watched_episode = excluded.last_watched_episode,
-            progress = excluded.progress
+            progress = excluded.progress,
+			updated_at = CURRENT_TIMESTAMP
     `, show, season, episode, progress)
 	if err != nil {
 		return err
 	}
-	_, err = db.Conn.Exec(`
-		INSERT INTO progress_fts(rowid, show_title)
-		SELECT rowid, show_title FROM progress
-		ON CONFLICT(rowid) DO UPDATE SET show_title=excluded.show_title
-	`)
-	if err != nil {
-		return err
-	}
+
 	return nil
 }
 
@@ -197,11 +199,7 @@ func (db *DB) FindLatestWatchedEpisode(query string) (*model.Episode, error) {
 
 	var ep model.Episode
 	if err == nil {
-		err = db.Conn.QueryRow(`
-			SELECT id, show_title, season, episode, file_path
-			FROM episodes
-			WHERE show_title = ? AND season = ? AND episode = ?
-		`, bestMatch, season, episode).Scan(&ep.Id, &ep.Title, &ep.Season, &ep.Episode, &ep.Path)
+		return db.GetEpisode(query, season, episode)
 		if err == nil {
 			return &ep, nil
 		}

@@ -11,12 +11,14 @@ import (
 	"github.com/yoooby/showtrack/internal/vlc"
 )
 
-
 func ParseArgs(args []string, db *db.DB) model.Episode {
 	switch len(args) {
 	case 0:
-		ep := db.FindLatestWatchedEpisodeGlobal()
-		return ep
+		ep, err := db.FindLatestWatchedEpisodeGlobal()
+		if err != nil {
+			panic(err)
+		}
+		return *ep
 	case 1:
 		// only show name
 		ep, err := db.FindLatestWatchedEpisode(args[0])

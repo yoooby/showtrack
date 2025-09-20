@@ -1,7 +1,9 @@
 package vlc
 
 import (
+	"fmt"
 	"log"
+	"os"
 	"os/exec"
 	"strconv"
 	"sync"
@@ -61,6 +63,7 @@ func (p *Player) startVLC() {
 		"--http-password", p.VLC.Password,
 		"--fullscreen", // Opens in fullscreen video mode
 	)
+
 	log.Println("started http")
 	if err := p.vlcCmd.Start(); err != nil {
 		log.Printf("Failed to start VLC: %v", err)
@@ -68,6 +71,12 @@ func (p *Player) startVLC() {
 	}
 
 	p.isRunning = true
+	go func() {
+		err := p.vlcCmd.Wait() // This blocks until VLC exits
+		log.Printf("VLC process exited: %v", err)
+		log.Println("VLC closed, exiting program...")
+		os.Exit(9)
+	}()
 	time.Sleep(2 * time.Second)
 }
 func (p *Player) monitorPlayback() {
@@ -85,10 +94,13 @@ func (p *Player) monitorPlayback() {
 				log.Printf("Failed to get VLC status: %v", err)
 				continue
 			}
-
 			if p.CurrentEP != nil && status["state"] == "playing" {
 				currentTime := int(status["time"].(float64))
-				p.db.SaveProgress(p.CurrentEP.Title, p.CurrentEP.Season, p.CurrentEP.Episode, currentTime)
+				println("called saveprogress")
+				err := p.db.SaveProgress(p.CurrentEP.Title, p.CurrentEP.Season, p.CurrentEP.Episode, currentTime)
+				if err != nil {
+					fmt.Println("Error", err.Error())
+				}
 			}
 
 			currentPos := int(status["currentplid"].(float64))

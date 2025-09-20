@@ -199,7 +199,7 @@ func performScan(path string, db *db.DB) {
 
 	fmt.Printf("📺 Found %d episodes\n", len(episodes))
 
-	err = db.SaveEpisdoes(episodes)
+	err = db.SaveEpisodes(episodes)
 	if err != nil {
 		fmt.Printf("❌ Error saving episodes: %v\n", err)
 		return

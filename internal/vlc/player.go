@@ -41,7 +41,12 @@ func (p *Player) PlayShow(ep model.Episode) {
 	defer p.mu.Unlock()
 
 	p.CurrentEP = &ep
-	p.Queue = p.db.GetNextEpisodes(ep.Title, ep.Season, ep.Episode, 2)
+	var err error
+	p.Queue, err = p.db.GetNextEpisodes(ep.Title, ep.Season, ep.Episode, 2)
+	if err != nil {
+		log.Printf("Failed to get next episodes: %v", err)
+		return
+	}
 	log.Println("Queue length:", len(p.Queue))
 	for _, e := range p.Queue {
 		log.Println(e.Title, e.Season, e.Episode, e.Path)
@@ -131,7 +136,11 @@ func (p *Player) setupInitialQueue() {
 	}
 
 	if p.CurrentEP != nil {
-		progress := p.db.GetProgress(p.CurrentEP.Title)
+		progress, err := p.db.GetProgress(p.CurrentEP.Title)
+		if err != nil {
+			log.Printf("Failed to get progress: %v", err)
+			return
+		}
 		if err := p.VLC.AddToPlaylist(p.CurrentEP.Path); err != nil {
 			log.Printf("Failed to add current episode: %v", err)
 			return
@@ -167,7 +176,11 @@ func (p *Player) maintainQueue(currentPlaylistLength int) {
 	defer p.mu.Unlock()
 
 	if len(p.Queue) < 3 && p.CurrentEP != nil {
-		moreEpisodes := p.db.GetNextEpisodes(p.CurrentEP.Title, p.CurrentEP.Season, p.CurrentEP.Episode, 5-len(p.Queue))
+		moreEpisodes, err := p.db.GetNextEpisodes(p.CurrentEP.Title, p.CurrentEP.Season, p.CurrentEP.Episode, 5-len(p.Queue))
+		if err != nil {
+			log.Printf("Failed to get next episodes: %v", err)
+			return
+		}
 
 		for _, ep := range moreEpisodes {
 			if !p.isInQueue(ep) {

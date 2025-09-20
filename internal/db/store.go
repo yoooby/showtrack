@@ -3,6 +3,7 @@ package db
 import (
 	"database/sql"
 	"fmt"
+	"log"
 	"strings"
 
 	_ "github.com/mattn/go-sqlite3" // <-- needed for SQLite driver
@@ -11,6 +12,40 @@ import (
 
 type DB struct {
 	Conn *sql.DB
+}
+
+func (db *DB) GetSetting(key string) string {
+	var value string
+	err := db.Conn.QueryRow(`
+		SELECT value FROM settings WHERE key = ?
+	`, key).Scan(&value)
+
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return "" // Setting doesn't exist
+		}
+		// Log error but don't panic in production
+		log.Printf("Error getting setting %s: %v", key, err)
+		return ""
+	}
+
+	return value
+}
+
+func (db *DB) SetSetting(key, value string) error {
+	_, err := db.Conn.Exec(`
+		INSERT INTO settings (key, value, updated_at)
+		VALUES (?, ?, CURRENT_TIMESTAMP)
+		ON CONFLICT(key) DO UPDATE SET
+			value = excluded.value,
+			updated_at = CURRENT_TIMESTAMP
+	`, key, value)
+
+	if err != nil {
+		log.Printf("Error setting %s: %v", key, err)
+	}
+
+	return err
 }
 
 func (db *DB) FindLatestWatchedEpisodeGlobal() (*model.Episode, error) {
@@ -65,20 +100,23 @@ func InitDB(path string) (*DB, error) {
 	if err != nil {
 		return nil, err
 	}
-	_, err = conn.Exec(`
-    	CREATE VIRTUAL TABLE IF NOT EXISTS shows_fts USING fts5(title, content='episodes', content_rowid='id');
-	`)
-	if err != nil {
-		return nil, err
-	}
-	_, err = conn.Exec(`
-		CREATE VIRTUAL TABLE IF NOT EXISTS progress_fts USING fts5(show_title, content='progress', content_rowid='rowid');
-	`)
-	if err != nil {
-		return nil, err
-	}
-	return &DB{Conn: conn}, nil
 
+	_, err = conn.Exec(`
+		CREATE TABLE IF NOT EXISTS settings (
+			key TEXT PRIMARY KEY,
+			value TEXT,
+			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+		)
+	`)
+	if err != nil {
+		return nil, err
+	}
+	_, err = conn.Exec(`CREATE TABLE IF NOT EXISTS folder_hashes (
+		path TEXT PRIMARY KEY,
+		hash TEXT
+	)
+	`)
+	return &DB{Conn: conn}, err
 }
 
 func (db *DB) SaveEpisdoes(eps []model.Episode) error {

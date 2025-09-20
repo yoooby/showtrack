@@ -14,8 +14,6 @@ type DB struct {
 	Conn *sql.DB
 }
 
-
-
 func InitDB(path string) (*DB, error) {
 	conn, err := sql.Open("sqlite3", path)
 	if err != nil {
@@ -118,22 +116,20 @@ func (db *DB) GetNextEpisodes(title string, season int, episode int, count int) 
 }
 
 func (db *DB) GetProgress(title string) int {
-    var ts int
-    err := db.Conn.QueryRow(`
+	var ts int
+	err := db.Conn.QueryRow(`
         SELECT progress
         FROM progress
         WHERE show_title = ?
     `, title).Scan(&ts)
-    if err != nil {
-        if err == sql.ErrNoRows {
-            return 0 // no progress saved yet
-        }
-        panic(err)
-    }
-    return ts
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return 0 // no progress saved yet
+		}
+		panic(err)
+	}
+	return ts
 }
-
-
 
 // TestGetRandomEpisode returns a random episode from the DB
 func (db *DB) TestGetRandomEpisode() *model.Episode {

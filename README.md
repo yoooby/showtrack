@@ -22,7 +22,6 @@ go build -o showtrack ./cmd/showtracker
 
 Also make sure VLC is installed and vlc is added to path
 
-## Usage
 
 
 ## Usage

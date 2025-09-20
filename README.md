@@ -43,7 +43,7 @@ showtrack scan --force
 
 
 ## Dependencies
-- Go 1.21+
+- Go 1.25.1
 - VLC Media Player (Duh)
 
 

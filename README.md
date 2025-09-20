@@ -48,7 +48,7 @@ showtrack scan --force
 
 
 ## Roadmap
-- [ ] Fuzzy searching for show names because i can't godamn type
+- [x] Fuzzy searching for show names because i can't godamn type
 - [ ] better parsing
 - [ ] CLI interface
 
